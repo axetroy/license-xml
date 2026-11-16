@@ -6,7 +6,7 @@ export default defineConfig({
     coverage: {
       provider: 'v8',
       include: ['src/index.js', 'src/protocol.js', 'src/cli.js'],
-      reporter: ['text', 'json-summary'],
+      reporter: ['text', 'json-summary', 'lcovonly'],
       thresholds: {
         lines: 90,
         functions: 90,
