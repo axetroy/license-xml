@@ -1,13 +1,13 @@
 #!/usr/bin/env node
-
 import { generateKeyPair, issueLicense, verifyLicense } from './index.js';
 import { readFileSync, writeFileSync, unlinkSync } from 'node:fs';
+import { pathToFileURL } from 'node:url';
 
-function usage() {
+export function usage() {
   return `Usage:
-  license-xml keygen --private private.pem --public public.pem
-  license-xml issue --payload payload.json --private private.pem --key-id ID --out license.license.xml
-  license-xml verify --file license.license.xml --key-id ID --public-key public.pem [--product-id ID] [--product-version N] [--machine-fingerprint SHA256]`;
+   license-xml keygen --private private.pem --public public.pem
+   license-xml issue --payload payload.json --private private.pem --key-id ID --out license.license.xml
+   license-xml verify --file license.license.xml --key-id ID --public-key public.pem [--product-id ID] [--product-version N] [--machine-fingerprint SHA256]`;
 }
 
 function parseOptions(args) {
@@ -33,11 +33,11 @@ function writeNewFile(path, content, mode = 0o644) {
   writeFileSync(path, content, { flag: 'wx', mode });
 }
 
-function run() {
-  const [command, ...args] = process.argv.slice(2);
+function run(argv, { stdout }) {
+  const [command, ...args] = argv;
   if (!command || command === '--help' || command === '-h') {
-    process.stdout.write(`${usage()}\n`);
-    return;
+    stdout.write(`${usage()}\n`);
+    return 0;
   }
   const options = parseOptions(args);
   const allowed = {
@@ -59,8 +59,8 @@ function run() {
       unlinkSync(options.private);
       throw error;
     }
-    process.stdout.write(`Wrote private and public keys.\n`);
-    return;
+    stdout.write(`Wrote private and public keys.\n`);
+    return 0;
   }
 
   if (command === 'issue') {
@@ -68,8 +68,8 @@ function run() {
     const payload = JSON.parse(readFileSync(options.payload, 'utf8'));
     const license = issueLicense(payload, { keyId: options['key-id'], privateKey: readFileSync(options.private) });
     writeNewFile(options.out, license);
-    process.stdout.write(`Issued ${options.out}\n`);
-    return;
+    stdout.write(`Issued ${options.out}\n`);
+    return 0;
   }
 
   if (command === 'verify') {
@@ -81,17 +81,20 @@ function run() {
       productVersion: options['product-version'],
       machineFingerprint: options['machine-fingerprint'],
     });
-    process.stdout.write(`${result.status}\n`);
-    if (result.status !== 'VALID') process.exitCode = 1;
-    return;
+    stdout.write(`${result.status}\n`);
+    return result.status === 'VALID' ? 0 : 1;
   }
-
-  process.stdout.write(`${usage()}\n`);
 }
 
-try {
-  run();
-} catch (error) {
-  process.stderr.write(`${error.message}\n${usage()}\n`);
-  process.exitCode = 2;
+export function main(argv, io = { stdout: process.stdout, stderr: process.stderr }) {
+  try {
+    return run(argv, io);
+  } catch (error) {
+    io.stderr.write(`${error.message}\n${usage()}\n`);
+    return 2;
+  }
+}
+
+if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
+  process.exitCode = main(process.argv.slice(2));
 }

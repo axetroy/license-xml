@@ -6,6 +6,10 @@
 - Run `npm ci` to install the locked dependencies.
 - Run `npm run check` before opening a pull request. It runs lint, tests, builds the documentation site and embedded playground, and checks the npm package contents.
 
+## Dependency overrides
+
+`package.json` pins `vite` to a patched 6.x release. VitePress pulls in `@vitejs/plugin-vue`, which declares `vite: ^5 || ^6`; the override keeps that transitive dependency on a version without GHSA-8g5g-mxqh-grgj. Do not raise it to Vite 7 or newer until VitePress supports it.
+
 ## Changes
 
 - Add or update tests for behavior changes and bug fixes.
