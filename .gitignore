@@ -6,3 +6,4 @@ docs/public/playground/
 *.license.xml
 *.private.pem
 private.pem
+coverage/

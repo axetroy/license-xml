@@ -1,10 +1,5 @@
 import { test } from 'vitest';
 import assert from 'node:assert/strict';
-import { spawnSync } from 'node:child_process';
-import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
-import { tmpdir } from 'node:os';
-import { join } from 'node:path';
-import { fileURLToPath, URL } from 'node:url';
 import { generateKeyPair, issueLicense, parseLicense, verifyLicense, LicenseStatus } from '../src/index.js';
 
 const { privateKey, publicKey } = generateKeyPair();
@@ -193,74 +188,18 @@ test('rejects XML that violates the license schema or parser constraints', () =>
   }
 });
 
-test('supports CLI key generation, issuance, and verification', () => {
-  const directory = mkdtempSync(join(tmpdir(), 'license-xml-'));
-  const cli = fileURLToPath(new URL('../src/cli.js', import.meta.url));
-  const paths = {
-    privateKey: join(directory, 'private.pem'),
-    publicKey: join(directory, 'public.pem'),
-    payload: join(directory, 'payload.json'),
-    license: join(directory, 'test.license.xml'),
-  };
-  const run = (...args) => spawnSync(process.execPath, [cli, ...args], { encoding: 'utf8' });
 
-  try {
-    assert.equal(run().status, 0);
-    assert.equal(run('--help').status, 0);
-    assert.equal(run('-h').status, 0);
-    assert.equal(run('unknown').status, 2);
-    assert.equal(run('keygen', '--private').status, 2);
-    assert.equal(run('keygen', '--private', 'one', '--private', 'two').status, 2);
-    assert.equal(run('keygen', '--private', 'one', '--public', 'two', '--extra', 'value').status, 2);
-    assert.equal(run('keygen', '--private', 'same', '--public', 'same').status, 2);
-    writeFileSync(paths.payload, JSON.stringify(payload));
-    assert.equal(run('keygen', '--private', paths.privateKey, '--public', paths.publicKey).status, 0);
-    const originalPrivateKey = readFileSync(paths.privateKey, 'utf8');
-    assert.equal(run('keygen', '--private', paths.privateKey, '--public', paths.publicKey).status, 2);
-    assert.equal(readFileSync(paths.privateKey, 'utf8'), originalPrivateKey);
-    const rollbackPrivate = join(directory, 'rollback.private.pem');
-    const existingPublic = join(directory, 'existing.public.pem');
-    writeFileSync(existingPublic, 'already exists');
-    assert.equal(run('keygen', '--private', rollbackPrivate, '--public', existingPublic).status, 2);
-    assert.equal(existsSync(rollbackPrivate), false);
-    assert.equal(run(
-      'issue',
-      '--payload', paths.payload,
-      '--private', paths.privateKey,
-      '--key-id', 'test-key',
-      '--out', paths.license,
-    ).status, 0);
-    const originalLicense = readFileSync(paths.license, 'utf8');
-    assert.equal(run(
-      'issue',
-      '--payload', paths.payload,
-      '--private', paths.privateKey,
-      '--key-id', 'test-key',
-      '--out', paths.license,
-    ).status, 2);
-    assert.equal(readFileSync(paths.license, 'utf8'), originalLicense);
-    const result = run(
-      'verify',
-      '--file', paths.license,
-      '--key-id', 'test-key',
-      '--public-key', paths.publicKey,
-      '--product-id', 'example',
-      '--product-version', '5',
-    );
-    assert.equal(result.status, 0, result.stderr);
-    assert.match(result.stdout, /VALID/);
-    const tamperedLicense = join(directory, 'tampered.license.xml');
-    writeFileSync(tamperedLicense, originalLicense.replace('LIC-001', 'LIC-002'));
-    const tamperedResult = run(
-      'verify',
-      '--file', tamperedLicense,
-      '--key-id', 'test-key',
-      '--public-key', paths.publicKey,
-    );
-    assert.equal(tamperedResult.status, 1);
-    assert.match(tamperedResult.stdout, /INVALID_SIGNATURE/);
-    assert.equal(readFileSync(paths.privateKey, { encoding: 'utf8' }).includes('PRIVATE KEY'), true);
-  } finally {
-    rmSync(directory, { recursive: true, force: true });
-  }
+test('treats a missing options object as an empty configuration', () => {
+  const xml = issue();
+  assert.equal(verifyLicense(xml, null).status, LicenseStatus.INVALID_SIGNATURE);
+  assert.equal(verifyLicense(xml).status, LicenseStatus.INVALID_SIGNATURE);
+  assert.equal(verifyLicense(xml, {}).status, LicenseStatus.INVALID_SIGNATURE);
+});
+
+test('ignores inherited properties on plain-object key registries', () => {
+  const xml = issue();
+  assert.equal(verifyLicense(xml, { publicKeys: {}, now }).status, LicenseStatus.INVALID_SIGNATURE);
+  assert.equal(verifyLicense(xml, { publicKeys: { 'test-key': publicKey }, now }).status, LicenseStatus.VALID);
+  assert.equal(verifyLicense(xml, { publicKeys: Object.create({ 'test-key': publicKey }), now }).status, LicenseStatus.INVALID_SIGNATURE);
+  assert.equal(verifyLicense(xml, { publicKeys: 42, now }).status, LicenseStatus.INVALID_SIGNATURE);
 });

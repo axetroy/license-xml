@@ -33,6 +33,13 @@ jobs:
       - name: Run checks
         if: matrix.node-version != 18
         run: npm run check
+      - name: Upload coverage report
+        if: matrix.node-version == 20
+        uses: actions/upload-artifact@v7
+        with:
+          name: coverage
+          path: coverage/
+          if-no-files-found: ignore
       - name: Run runtime tests
         if: matrix.node-version == 18
         run: npm run test:runtime
